@@ -46,5 +46,5 @@ def after_request(response):
 @login_required
 def dashboard():
     """Show dashboard"""
-
+    
     return render_template("dashboard.html")
