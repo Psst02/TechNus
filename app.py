@@ -7,15 +7,11 @@ from helpers import login_required, db_teardown
 # Blueprints
 from auth import auth_bp, oauth
 
-app = Flask(__name__)
+from dotenv import load_dotenv
 
-# Running locally
-if os.environ.get("PYTHONANYWHERE_DOMAIN") is None:
-    # Load local .env file
-    # In PythonAnywhere, loaded from WSGI
-    from dotenv import load_dotenv
-    load_dotenv()
-    
+load_dotenv()
+
+app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY")
 print("SECRET_KEY =", app.secret_key)
 
