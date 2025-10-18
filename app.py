@@ -15,8 +15,9 @@ if os.environ.get("PYTHONANYWHERE_DOMAIN") is None:
     # In PythonAnywhere, loaded from WSGI
     from dotenv import load_dotenv
     load_dotenv()
-
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+    
+app.secret_key = os.environ.get("SECRET_KEY")
+print("SECRET_KEY =", app.secret_key)
 
 # Configure session to use filesystem (instead of signed cookies)
 app.config["SESSION_PERMANENT"] = False
@@ -46,5 +47,5 @@ def after_request(response):
 @login_required
 def dashboard():
     """Show dashboard"""
-    
+
     return render_template("dashboard.html")
