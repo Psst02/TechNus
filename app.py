@@ -8,12 +8,10 @@ from helpers import login_required, db_teardown
 from auth import auth_bp, oauth
 
 from dotenv import load_dotenv
-
-load_dotenv()
+load_dotenv()  # Always load this first
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY")
-print("SECRET_KEY =", app.secret_key)
 
 # Configure session to use filesystem (instead of signed cookies)
 app.config["SESSION_PERMANENT"] = False
@@ -23,8 +21,7 @@ Session(app)
 oauth.init_app(app)  # Sets up Authlib OAuth with Flask
 db_teardown(app)     # Register db teardown
 
-# Adapted from: Real Python
-# URL: https://realpython.com/flask-blueprint/
+# https://realpython.com/flask-blueprint/
 # Register blueprints
 app.register_blueprint(auth_bp)
 
