@@ -1,0 +1,104 @@
+{% extends "side_bar.html" %}
+
+{% block title %}
+    Profile
+{% endblock %}
+
+{% block page_title %}
+    Profile
+{% endblock %}
+
+
+{% block main %}
+    <!-- https://stackoverflow.com/questions/5628011/how-to-upload-a-file-to-my-server-using-html -->
+    <form action="/profile" method="post" enctype="multipart/form-data">
+        <hr>
+        <div class="flex-grow-1 overflow-auto">
+            <!-- Profile photo and buttons -->
+            <div class="col-auto text-start">
+                <!-- Profile photo -->
+                <img src="{{ user.photo_url }}" width="50" height="50" class="rounded-circle border border-secondary ms-1" alt="Profile Photo">
+
+                <!-- Upload button -->
+                <button class="btn btn-primary rounded-pill px-3 pb-2 py-2 ms-2" type="button" onclick="triggerUpload('upload-input')">
+                    <i class="bi bi-upload"></i> Upload
+                </button>
+                <!-- https://stackoverflow.com/questions/3828554/how-to-allow-input-type-file-to-accept-only-image-files -->
+                <input type="file" name="upload" accept="image/*" id="upload-input" onchange="autoSubmit(this.id)" hidden aria-hidden="true">
+
+                <!-- Remove button -->
+                <button class="btn btn-danger rounded-pill px-3 pb-2 py-2 ms-1" type="button" onclick="autoSubmit('remove-input')">
+                    <i class="bi bi-trash3"></i> Remove
+                </button>
+                <input type="hidden" name="remove" value="0" id="remove-input" aria-hidden="true">
+
+                <!-- Extra info -->
+                <div class="ms-3 mt-1">
+                    <small class="text-muted">Recommended: 180 x 180 pixels</small>
+                </div>
+            </div>
+            <hr>
+
+            <!-- Personal details -->
+            <div class="d-flex flex-column">
+                <!-- name -->
+                <label for="username-input" class="form-label mb-1 ms-3"><b>Username</b></label>
+                <p class="feedback text-start ms-3 mb-1">{{ name_fb | default('') }}</p>
+
+                <div class="input-group mb-4 c-w-300">
+                    <input class="form-control rounded-start-pill py-2 ps-3 pe-5 ms-1" name="username" type="text"
+                           id="username-input" value="{{ user.name }}" disabled>
+                    <span class="input-group-text rounded-end-pill bg-grey border-2">
+                        <i class="bi bi-pencil-square text-secondary cursor-pointer" role="button"
+                           onclick="enableField('username-input')"></i>
+                    </span>
+                </div>
+            
+                <!-- Email address -->
+                <label for="email-input" class="form-label mb-1 ms-3"><b>Email address</b></label>
+                <p class="feedback text-start ms-3 mb-1">{{ email_fb | default('') }}</p>
+                <div class="mb-4">
+                    <input class="form-control rounded-pill py-2 ps-3 pe-5 ms-1 c-w-300" name="email"
+                        type="text" id="email-input" value="{{ user.email }}" disabled>
+                </div>
+            </div>
+            <hr>
+
+            <!-- Submit button -->
+            <button class="btn btn-primary rounded-pill px-4 pb-2 py-2 ms-1" type="submit">Save Changes</button>
+        </div>
+
+    </form>
+
+    <script>
+        // Enable input edit
+        function enableField(id) {
+            const input = document.getElementById(id);
+            input.disabled = false;
+            input.focus();
+        }
+
+        // Trigger file upload
+        function triggerUpload(inputId) {
+            const fileInput = document.getElementById(inputId);
+            if (fileInput) {
+                fileInput.click();
+            }
+        }
+
+        // Auto-submit
+        function autoSubmit(idAgain) {
+            const hiddenInput = document.getElementById(idAgain);
+            // Ensure file is selected
+            if (idAgain === "upload-input" && hiddenInput.files.length > 0) {
+                hiddenInput.form.submit();
+            }
+            // Extra step taken to avoid type="submit" for button
+            // Pressing enter won't remove photo
+            else if (idAgain === "remove-input") {
+                hiddenInput.value = "1";
+                hiddenInput.form.submit();
+            }
+        }
+    </script>
+{% endblock %}

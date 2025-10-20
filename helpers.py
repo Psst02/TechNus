@@ -21,9 +21,7 @@ def login_required(f):
     return decorated_function
 
 
-# Adapted from Flask documentation:
-# URL: https://flask.palletsprojects.com/en/latest/patterns/sqlite3/
-# CS50 SQL → SQLite3 adaptation guidance by ChatGPT (OpenAI)
+# https://flask.palletsprojects.com/en/latest/patterns/sqlite3/
 def get_db():
     """Store db connection for current request in Flask's g"""
 
@@ -35,9 +33,6 @@ def get_db():
     return g.db
 
 
-# Adapted from Flask documentation:
-# URL: https://flask.palletsprojects.com/en/latest/patterns/sqlite3/
-# CS50 SQL → SQLite3 adaptation guidance by ChatGPT (OpenAI)
 def close_db(error=None):
     """Close the DB connection at the end"""
 
@@ -48,10 +43,21 @@ def close_db(error=None):
         db.close()
 
 
-# Adapted from Flask documentation:
-# URL: https://flask.palletsprojects.com/en/latest/patterns/sqlite3/
-# CS50 SQL → SQLite3 adaptation guidance by ChatGPT (OpenAI)
 def db_teardown(app):
     """Register database teardown for the given Flask app."""
 
     app.teardown_appcontext(close_db)
+
+
+def remove_photo(web_path, default_web_path):
+    """Delete photo from file system if it's not default photo"""
+
+    if web_path and web_path != default_web_path:
+        # https://docs.python.org/3/library/os.path.html
+        # Convert from web to file path
+        file_path = os.path.join(current_app.root_path, web_path.lstrip("/"))
+        file_path = os.path.normpath(file_path)
+
+        # Validate path and ensure selected is a file before delete
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            os.remove(file_path)
