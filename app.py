@@ -6,6 +6,7 @@ from helpers import login_required, db_teardown
 
 # Blueprints
 from auth import auth_bp, oauth
+from settings import settings_bp
 
 from dotenv import load_dotenv
 load_dotenv()  # Always load this first
@@ -24,6 +25,7 @@ db_teardown(app)     # Register db teardown
 # https://realpython.com/flask-blueprint/
 # Register blueprints
 app.register_blueprint(auth_bp)
+app.register_blueprint(settings_bp)
 
 
 # Disable data cache (Ensures fresh content)
