@@ -57,7 +57,7 @@ def callback():
     db = get_db()
     # Store in db if new user
     db.execute("SELECT id, photo_url FROM users WHERE google_id = ?", (google_id,))
-    user = cur.fetchone()
+    user = db.fetchone()
     if user:
         user_id = user["id"]
         photo = user["photo_url"]
@@ -66,7 +66,7 @@ def callback():
             db.execute("""INSERT into users (google_id, name, email, photo_url) 
                            VALUES (?, ?, ?, ?)""", (google_id, name, email, photo_url))
             db.commit()
-            user_id = cur.lastrowid
+            user_id = db.lastrowid
             photo = photo_url
             
         except sqlite3.IntegrityError:
