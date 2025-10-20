@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 import uuid
 
 from flask import Blueprint, render_template, request, redirect, session, flash, current_app

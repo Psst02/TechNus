@@ -5,6 +5,7 @@ from flask_session import Session
 from helpers import login_required, db_teardown
 
 # Blueprints
+from news import news_bp
 from auth import auth_bp, oauth
 from settings import settings_bp
 
@@ -24,6 +25,7 @@ db_teardown(app)     # Register db teardown
 
 # https://realpython.com/flask-blueprint/
 # Register blueprints
+app.register_blueprint(news_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(settings_bp)
 
@@ -36,11 +38,3 @@ def after_request(response):
     response.headers["Expires"] = 0
     response.headers["Pragma"] = "no-cache"
     return response
-
-
-@app.route("/")
-@login_required
-def dashboard():
-    """Show dashboard"""
-
-    return render_template("dashboard.html")
