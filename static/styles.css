@@ -1,0 +1,28 @@
+.quicksand-font {
+  font-family: "Quicksand", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: 25px;
+  font-style: normal;
+}
+
+.feedback {
+    color: red;
+}
+
+.u-color {
+    color: #AA88DD !important;
+}
+
+.c-w-300 {
+    width: 300px;
+}
+
+/* Sidebar is static on larger devices */
+@media (min-width: 768px) {
+    .offcanvas-md {
+        position: static !important;
+        transform: none !important;
+        visibility: visible !important;
+    }
+}

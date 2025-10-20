@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Login
+{% endblock %}
+
+{% block main %}
+    <form action="/login" method="post">
+        <!--Image source: https://www.cleanpng.com/png-google-multicolor-logo-8300190/-->
+        <button class="btn btn-light border border-2 rounded-pill text-center px-3" type="submit">
+            <img src="/static/google_logo.png" height="25" width="25" alt="Google multicolor logo" mb-0>
+            &nbsp;Log in with Google&nbsp;
+        </button>
+    </form>
+{% endblock %}

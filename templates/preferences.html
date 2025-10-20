@@ -1,0 +1,80 @@
+{% extends "side_bar.html" %}
+
+{% block title %}
+    Preferences
+{% endblock %}
+
+{% block page_title %}
+    Preferences
+{% endblock %}
+
+
+{% block main %}
+    <form action="/preferences" method="post">
+        <hr>
+        <!-- Input fields -->
+        <div class="c-w-300 row mb-2">
+            <label for="job-title" class="fw-bold m-0">Job title:</label>
+            <small class="feedback mb-2">{{ fb1 | default('') }}</small>
+            <input type="text" id="job-title" name="jobs" 
+                   class="form-control rounded-4 px-2 ms-2"
+                   placeholder="e.g. Data Scientist">
+        </div>
+        <div class="c-w-300 row mb-2">
+            <label for="sub-industry" class="fw-bold">Sub-industry:</label>
+            <small class="feedback mb-2">{{ fb2 | default('') }}</small>
+            <input type="text" id="sub-industry" name="industries" 
+                   class="form-control rounded-4 px-2 ms-2"
+                   placeholder="e.g. Education">
+        </div>
+        <div class="c-w-300 row mb-2">
+            <label for="keywords" class="fw-bold">Keywords:</label>
+            <small class="feedback mb-2">{{ fb3 | default('') }}</small>
+            <textarea class="form-control rounded-4 px-2 ms-2" 
+                      rows="3" id="keywords" name="keywords"
+                      placeholder="e.g. Google Gemini, Firebase, ..."></textarea>
+        </div>
+        <hr>
+
+        <!-- Save button -->
+        {% if has_existing %}
+            <button type="button" class= "btn btn-primary mt-2 rounded-pill px-4 py-2" data-bs-toggle="modal" 
+                    data-bs-target="#confirm-modal">Save Changes</button>
+        {% else %}
+            <button type="submit" class="btn btn-primary mt-2 rounded-pill px-4 py-2">Save Changes</button>
+        {% endif %}
+
+        <!-- https://getbootstrap.com/docs/4.0/components/modal/ -->
+        <!-- https://getbootstrap.com/docs/5.3/components/modal/#via-javascript -->
+        <!-- Confirmation -->
+        <div class="modal" id="confirm-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <!-- Title -->
+                    <div class="modal-header">
+                        <h6>User confirmation needed</h6>
+                        <button type="button" class="btn-close me-1" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+
+                    <!-- Context -->
+                    <div class="modal-body">
+                        <p class="text-start ms-2">Your preferences will be overwritten.</p>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary mt-2 rounded-pill px-4 py-2">Yes</button>
+                        <button type="button" data-bs-dismiss="modal" class="btn btn-danger mt-2 rounded-pill px-4 py-2">No</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <script>
+        // Initialize Tagify for each field
+        new Tagify(document.querySelector('#job-title'));
+        new Tagify(document.querySelector('#sub-industry'));
+        new Tagify(document.querySelector('#keywords'));
+    </script>
+{% endblock %}
