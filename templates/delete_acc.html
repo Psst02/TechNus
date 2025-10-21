@@ -1,0 +1,24 @@
+{% extends "side_bar.html" %}
+
+{% block title %}
+    Delete Account
+{% endblock %}
+
+{% block page_title %}
+    Delete Account
+{% endblock %}
+
+
+{% block main %}
+    <form action="/delete-account" method="post">
+        <hr>
+        <div class="c-w-300 row mb-2">
+            <p>This will delete your account and all its related data. Type 'Confirm' and submit to delete.</p>
+            <small class="feedback mb-2">{{ fb | default('') }}</small>
+            <input type="text" name="confirm-delete" class="form-control rounded-pill px-2 ms-2">
+        </div>
+        <hr>
+
+        <button type="submit" class="btn btn-danger mt-2 rounded-pill px-4 py-2">Delete Account</button>
+    </form>
+{% endblock %}

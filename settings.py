@@ -131,5 +131,22 @@ def delete_acc():
     """Let user delete account and related data"""
 
     if request.method == "POST":
-        return
+        text = request.form.get("confirm-delete")
+        if not text:
+            return render_template("delete_acc.html", fb="Required field")
+        
+        # Ensure case insensitive
+        text = text.lower()
+        if text == "confirm":
+            
+            session.clear()
+            # Delete from db
+            db = get_db()
+            db.execute("DELETE FROM users WHERE id = ?", (session["user_id"],))
+
+        db.commit()
+
+        flash("Account deleted.", "success")
+        return redirect("/")
+        
     return render_template("delete_acc.html")
