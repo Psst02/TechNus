@@ -81,10 +81,10 @@ def preferences():
 
     db = get_db()
 
-    # Initialize to load preferences
+    # Initialize default prefs
     prefs = {"jobs": [], "industries": [], "keywords": []}
 
-    # Get keywords and their associated type
+    # Fetch existing prefs if any
     rows = db.execute("""
         SELECT p.keyword, t.name
         FROM preferences p
@@ -92,19 +92,17 @@ def preferences():
         WHERE p.user_id = ?
     """, (session["user_id"],)).fetchall()
 
-    # Append keywords to lists inside
+    # Load json lists (strings) from db
     for row in rows:
-        prefs[row["name"]].append(row["keyword"])
+        prefs[row["name"]] = (json.loads(row["keyword"]) if row["keyword"] else []) or []
 
-    # Build a dict from table to get id by name
+    # Map type names to id(s)
     type_map = {row["name"]: row["id"] for row in db.execute("SELECT * FROM preference_types")}
-
-    # Check if user already set preferences
-    existing = db.execute("SELECT 1 FROM preferences WHERE user_id = ?", (session["user_id"],)).fetchone()
-    has_existing = bool(existing)
+    # Check if user already set prefs
+    has_existing = bool(rows)
 
     if request.method == "POST":
-        # parse Tagify json string
+        # Parse tagify json string
         def parse_tagify(field_name):
             raw = request.form.get(field_name, '[]')
             try:
@@ -133,15 +131,15 @@ def preferences():
                 has_existing=has_existing,
                 prefs={key: json.dumps(values) for key, values in prefs.items()},  # Convert lists to strings
             )   
-
+                
         # Overwrite preferences
         db.execute("DELETE FROM preferences WHERE user_id = ?", (session["user_id"],))
 
-        # Insert string lists into relevant types
+        # Insert JSON lists into relevant types
         for key, values in {"jobs": jobs, "industries": industries, "keywords": keywords}.items():
-            for word in values:
-                db.execute("INSERT INTO preferences (user_id, type_id, keyword) VALUES (?, ?, ?)",
-                            (session["user_id"], type_map[key], word))
+            db.execute(
+                "INSERT INTO preferences (user_id, type_id, keyword) VALUES (?, ?, ?)",
+                (session["user_id"], type_map[key], json.dumps(values)))
                 
         db.commit()
         flash("Preferences saved successfully!")

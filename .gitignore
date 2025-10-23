@@ -17,3 +17,5 @@ venv/
 
 # Flask stuff
 instance/
+
+test.py

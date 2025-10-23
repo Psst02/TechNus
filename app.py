@@ -45,8 +45,8 @@ def after_request(response):
 def dashboard():
     """Show dashboard"""
 
-    # Get relevant articles
-    articles = []
-    # Get fetch status
+    # Ensure there is row in fetch_status tables for today
+        # Match user's keywords to articles' and get articles if completed = 0 (fetch not yet summarized)
+        # Update completed to 1 (toggle)
 
     return render_template("dashboard.html", articles=articles, news_ready=0)
