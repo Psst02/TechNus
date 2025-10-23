@@ -80,7 +80,26 @@ def preferences():
     """Let user set up keywords"""
 
     db = get_db()
-    # Check if user already got preferences
+
+    # Initialize to load preferences
+    prefs = {"jobs": [], "industries": [], "keywords": []}
+
+    # Get keywords and their associated type
+    rows = db.execute("""
+        SELECT p.keyword, t.name
+        FROM preferences p
+        JOIN preference_types t ON p.type_id = t.id
+        WHERE p.user_id = ?
+    """, (session["user_id"],)).fetchall()
+
+    # Append keywords to lists inside
+    for row in rows:
+        prefs[row["name"]].append(row["keyword"])
+
+    # Build a dict from table to get id by name
+    type_map = {row["name"]: row["id"] for row in db.execute("SELECT * FROM preference_types")}
+
+    # Check if user already set preferences
     existing = db.execute("SELECT 1 FROM preferences WHERE user_id = ?", (session["user_id"],)).fetchone()
     has_existing = bool(existing)
 
@@ -89,7 +108,7 @@ def preferences():
         def parse_tagify(field_name):
             raw = request.form.get(field_name, '[]')
             try:
-                # Converts to python dict and discard empty
+                # Discard empty and make a list
                 return [item["value"].strip() for item in json.loads(raw) if item.get("value", "").strip()]
             except json.JSONDecodeError:
                 return []
@@ -108,21 +127,31 @@ def preferences():
 
         # Ensure at least 1 input each
         if fb1 or fb2 or fb3:
-            return render_template("preferences.html", fb1=fb1, fb2=fb2, fb3=fb3, has_existing=has_existing)   
-        
-        combined_keywords = jobs + industries + keywords
-        # Delete if existing
+            return render_template(
+                "preferences.html", 
+                fb1=fb1, fb2=fb2, fb3=fb3, 
+                has_existing=has_existing,
+                prefs={key: json.dumps(values) for key, values in prefs.items()},  # Convert lists to strings
+            )   
+
+        # Overwrite preferences
         db.execute("DELETE FROM preferences WHERE user_id = ?", (session["user_id"],))
-        # Add to preferences
-        for word in combined_keywords:
-            db.execute("INSERT INTO preferences (user_id, keyword) VALUES (?, ?)", (session["user_id"], word))
+
+        # Insert string lists into relevant types
+        for key, values in {"jobs": jobs, "industries": industries, "keywords": keywords}.items():
+            for word in values:
+                db.execute("INSERT INTO preferences (user_id, type_id, keyword) VALUES (?, ?, ?)",
+                            (session["user_id"], type_map[key], word))
+                
         db.commit()
-        
-        # Feedback on change and redirect
         flash("Preferences saved successfully!")
         return redirect("/preferences")
 
-    return render_template("preferences.html", has_existing=has_existing)
+    return render_template(
+        "preferences.html", 
+        has_existing=has_existing,
+        prefs={key: json.dumps(values) for key, values in prefs.items()},  # Convert lists to strings
+    )
 
 
 @settings_bp.route("/delete-account", methods=["GET", "POST"])

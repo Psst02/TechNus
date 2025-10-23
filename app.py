@@ -5,7 +5,7 @@ from flask_session import Session
 from helpers import login_required, db_teardown
 
 # Blueprints
-from news import news_bp
+from fetch_news import news_bp
 from auth import auth_bp, oauth
 from settings import settings_bp
 
@@ -38,3 +38,15 @@ def after_request(response):
     response.headers["Expires"] = 0
     response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.route("/")
+@login_required
+def dashboard():
+    """Show dashboard"""
+
+    # Get relevant articles
+    articles = []
+    # Get fetch status
+
+    return render_template("dashboard.html", articles=articles, news_ready=0)

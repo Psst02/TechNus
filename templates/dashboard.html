@@ -6,7 +6,7 @@
 
 {% block main %}
     <div class="container">
-        <h4 class="mb-3">Trending Topics</h4>
+        <h4 class="mb-3">Trending Topics For You</h4>
         <hr>
         
         <!-- https://getbootstrap.com/docs/4.0/components/list-group/ -->
@@ -30,8 +30,77 @@
                 <div class="collapse my-2 ms-5 text-start" id="summary">
                     <p class="mb-0">Summary ....</p>
                 </div>
-            </li>
-            
-            
+            </li>        
         </ul>
+    </div>   
+    
+    {% if news_ready == 0 %}
+    <script type="module">
+
+        async function summarizeArticles() {
+
+            // Ensure browser supports api
+            if ('Summarizer' in self) {
+
+                // Headline summarizer
+                const headlines = {
+                    sharedContext: "",
+                    type: "headline",
+                    format: "plain-text",
+                    length: "short"
+                };
+
+                // Bullet point summarizer
+                const bullets = {
+                    sharedContext: "",
+                    type: "key-points",
+                    format: "plain-text",
+                    length: "medium"
+                };
+
+                const availability = await Summarizer.availability();
+                if (availability === 'unavailable') {
+                    // The Summarizer API isn't usable.
+                    return;
+                }
+
+                // Check for user activation before creating the summarizer
+                if (navigator.userActivation.isActive) {
+                    
+                    // Download the model only once
+                    const monitor = (m) => {
+                        m.addEventListener("downloadprogress", (e) => {
+                            console.log(`Model ${Math.round(e.loaded * 100)}% downloaded`);
+                        });
+                    };
+
+                    // Create summarizers
+                    const summarizerH = await Summarizer.create(headlines);
+                    const summarizerB = await Summarizer.create(bullets);
+                }
+
+                // Store urls from flask in a list
+                const articleUrls = [];
+
+                // Summarize articles
+                for (const url of articleUrls) {
+
+                    // Parse article text via url
+                    text = ;
+
+                    // Generate summaries
+                    const heading = await summarizerH.summarize(text, {
+                        context: '';
+                    });
+                    const summary = await summarizerB.summarize(text, {
+                        context: '';
+                    });
+
+                    // Populate the summary above somehow
+                }
+            }
+        }
+
+    </script>
+    {% endif %}
 {% endblock %}

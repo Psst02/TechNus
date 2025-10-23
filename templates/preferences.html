@@ -37,7 +37,7 @@
                    placeholder="e.g. Education">
         </div>
         <div class="c-w-300 row mb-2">
-            <label for="keywords" class="fw-bold">Keywords:</label>
+            <label for="keywords" class="fw-bold">Other tags:</label>
             <small class="feedback mb-2">{{ fb3 | default('') }}</small>
             <textarea class="form-control rounded-4 px-2 ms-2" 
                       rows="3" id="keywords" name="keywords"
@@ -81,9 +81,19 @@
     </form>
 
     <script>
-        // Initialize Tagify for each field
-        new Tagify(document.querySelector('#job-title'));
-        new Tagify(document.querySelector('#sub-industry'));
-        new Tagify(document.querySelector('#keywords'));
+        // Parse JSON from Jinja
+        const jobsData = JSON.parse('{{ prefs.jobs | safe }}');
+        const industriesData = JSON.parse('{{ prefs.industries | safe }}');
+        const keywordsData = JSON.parse('{{ prefs.keywords | safe }}');
+
+        // Initialize Tagify
+        const jobsTagify = new Tagify(document.querySelector('#job-title'));
+        const industriesTagify = new Tagify(document.querySelector('#sub-industry'));
+        const keywordsTagify = new Tagify(document.querySelector('#keywords'));
+
+        // Add existing tags
+        jobsTagify.addTags(jobsData);
+        industriesTagify.addTags(industriesData);
+        keywordsTagify.addTags(keywordsData);
     </script>
 {% endblock %}
