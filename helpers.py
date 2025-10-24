@@ -1,5 +1,7 @@
 import os
+import re
 import sqlite3
+import unicodedata
 
 from flask import redirect, session, g, current_app
 from functools import wraps
@@ -61,3 +63,17 @@ def remove_photo(web_path, default_web_path):
         # Validate path and ensure selected is a file before delete
         if os.path.exists(file_path) and os.path.isfile(file_path):
             os.remove(file_path)
+
+
+def normalize_text(text):
+    """Normalize string: lowercase, remove punctuation, collapse spaces."""
+
+    # Ensure string input
+    if not isinstance(text, str):
+        return ""
+
+    text = unicodedata.normalize("NFKD", text)  # Normalize fancy unicode
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", " ", text)  # Remove punctuation (non-word, non-space)
+    text = re.sub(r"\s+", " ", text)      # Collapse multiple spaces
+    return text.strip()                   # Remove leading/trailing spaces and return

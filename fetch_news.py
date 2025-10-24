@@ -3,19 +3,20 @@ import os
 import requests
 
 from datetime import date, datetime, timezone
+from flask import Blueprint, current_app
 import xml.etree.ElementTree as ET
+from rapidfuzz import fuzz
 
-from flask import Blueprint, render_template, flash, current_app
-from helpers import get_db
+from helpers import get_db, normalize_text
 from dotenv import load_dotenv
 
 load_dotenv()  # load variables from .env
-print(os.getenv("NEWSDATA_KEY"))  # sanity check
 
 # https://realpython.com/flask-blueprint/
 # Define blueprint for fetchin news
 news_bp = Blueprint("fetch_news", __name__)
 
+FUZZY_LIMIT = 65  # Fuzzy matching threshold (0–100)
 NEWSDATA_KEY = os.environ.get("NEWSDATA_KEY")
 
 
@@ -69,12 +70,12 @@ def fetch_google_tech_news(batch):
     response.raise_for_status()
 
     # Print raw XML
-    print("===== RAW XML START =====")
-    print(response.text[:2000])  # print first 2k chars to avoid huge output
-    print("===== RAW XML END =====")
+    #print("===== RAW XML START =====")
+    #print(response.text[:2000])  # print first 2k chars to avoid huge output
+    #print("===== RAW XML END =====")
 
     articles = []
-    today = date.today()
+    #today = date.today()
 
     # Parse XML and extract details
     root = ET.fromstring(response.text)
@@ -106,12 +107,18 @@ def fetch_google_tech_news(batch):
         title = item.findtext("title", "")
         desc = item.findtext("description", "")
 
-        # Keyword matching (case-insensitive)
-        text = " ".join([title, desc]).lower()
-        keywords = {k for k in batch if k in text}
+        # Keyword matching
+        keywords = set()
+        clean_title = normalize_text(title or "")
+        clean_desc = normalize_text(desc or "")
+        text = " ".join([clean_title, clean_desc])
+
+        for word in batch:
+            if fuzz.partial_ratio(word, text) > FUZZY_LIMIT:
+                keywords.add(word)  # Add keyword to set
         
         # Ensure required info exists
-        if id and link:
+        if id and link and keywords:
             articles.append({
                 "id": id,
                 "article_url": link,
@@ -139,7 +146,7 @@ def fetch_from_newsdata(batch, max_results=10):
         "sort": "pubdateasc",
         "removeduplicate": 1,
     }     
-    print(f"🔍 Querying NewsData.io with: {queries}")
+    #print(f"🔍 Querying NewsData.io with: {queries}")
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()  
     data = response.json()       
@@ -163,16 +170,25 @@ def fetch_from_newsdata(batch, max_results=10):
         title = r.get("title")
         desc = r.get("description")
 
-        # Ensure keywords is a list and filter None
-        kw = r.get("keywords") or []
-        kw = [str(k) for k in kw if k]
+        # Normalize long texts
+        keywords = set()
+        clean_title = normalize_text(title or "")
+        clean_desc = normalize_text(desc or "")
+
+        # Normalize keywords from article if any
+        keys = r.get("keywords") or []
+        clean_keys = [normalize_text(str(k)) for k in keys if k]
+
+        # Combine all text for fuzzy matching
+        text = " ".join([clean_title, clean_desc] + clean_keys)
 
         # Match keywords
-        text = " ".join([title or "", desc or ""] + kw).lower()
-        keywords = {k for k in batch if k in text}
+        for word in batch:
+            if fuzz.partial_ratio(word, text) > FUZZY_LIMIT:
+                keywords.add(word)
 
         # Ensure required info exists
-        if id and link and desc:
+        if id and link and keywords:
             articles.append({
                 "id": id,
                 "article_url": link,
@@ -212,9 +228,9 @@ def fetch_tech_articles():
     all_keywords = set()
     for row in rows:
         try:
-            # Convert each list item to lowercase and update set
+            # Convert json string back to list and update set
             keywords_list = json.loads(row["keyword"])
-            all_keywords.update(k.lower() for k in keywords_list if k)
+            all_keywords.update(k for k in keywords_list if k)
         except (TypeError, json.JSONDecodeError):
             continue  # Move onto next list
 

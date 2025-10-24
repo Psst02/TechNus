@@ -3,7 +3,7 @@ import os
 import uuid
 
 from flask import Blueprint, render_template, request, redirect, session, flash, current_app
-from helpers import login_required, get_db, remove_photo
+from helpers import login_required, get_db, remove_photo, normalize_text
 from werkzeug.utils import secure_filename
 
 # https://realpython.com/flask-blueprint/
@@ -106,8 +106,12 @@ def preferences():
         def parse_tagify(field_name):
             raw = request.form.get(field_name, '[]')
             try:
-                # Discard empty and make a list
-                return [item["value"].strip() for item in json.loads(raw) if item.get("value", "").strip()]
+                # Discard empty and normalize valid words
+                return [
+                    normalize_text(item["value"])
+                    for item in json.loads(raw) 
+                    if item.get("value", "").strip()]
+            
             except json.JSONDecodeError:
                 return []
             

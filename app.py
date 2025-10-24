@@ -49,4 +49,4 @@ def dashboard():
         # Match user's keywords to articles' and get articles if completed = 0 (fetch not yet summarized)
         # Update completed to 1 (toggle)
 
-    return render_template("dashboard.html", articles=articles, news_ready=0)
+    return render_template("dashboard.html", news_ready=0)
