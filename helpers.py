@@ -6,13 +6,9 @@ import unicodedata
 from flask import redirect, session, g, current_app
 from functools import wraps
 
-
+# https://flask.palletsprojects.com/en/latest/patterns/viewdecorators/
 def login_required(f):
-    """
-    Decorate routes to require login.
-
-    https://flask.palletsprojects.com/en/latest/patterns/viewdecorators/
-    """
+    """Decorate routes to require login."""
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -49,20 +45,6 @@ def db_teardown(app):
     """Register database teardown for the given Flask app."""
 
     app.teardown_appcontext(close_db)
-
-
-def remove_photo(web_path, default_web_path):
-    """Delete photo from file system if it's not default photo"""
-
-    if web_path and web_path != default_web_path:
-        # https://docs.python.org/3/library/os.path.html
-        # Convert from web to file path
-        file_path = os.path.join(current_app.root_path, web_path.lstrip("/"))
-        file_path = os.path.normpath(file_path)
-
-        # Validate path and ensure selected is a file before delete
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            os.remove(file_path)
 
 
 def normalize_text(text):

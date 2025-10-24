@@ -1,11 +1,13 @@
+import json
 import os
 
-from flask import Flask, render_template
+from datetime import date
+from flask import Flask, flash, session, render_template
 from flask_session import Session
-from helpers import login_required, db_teardown
+from helpers import login_required, get_db, db_teardown
+from newspaper import Article
 
 # Blueprints
-from fetch_news import news_bp
 from auth import auth_bp, oauth
 from settings import settings_bp
 
@@ -25,7 +27,6 @@ db_teardown(app)     # Register db teardown
 
 # https://realpython.com/flask-blueprint/
 # Register blueprints
-app.register_blueprint(news_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(settings_bp)
 
@@ -45,8 +46,50 @@ def after_request(response):
 def dashboard():
     """Show dashboard"""
 
-    # Ensure there is row in fetch_status tables for today
-        # Match user's keywords to articles' and get articles if completed = 0 (fetch not yet summarized)
-        # Update completed to 1 (toggle)
+    db = get_db()
+    processed_articles = []
 
-    return render_template("dashboard.html", news_ready=0)
+    # Get fetch_status
+    status = db.execute("SELECT completed FROM fetch_status WHERE fetch_date = ?", (date.today(),)).fetchone()
+    # Fetched but not processed
+    if status and status["completed"] == 0:
+        # Get user's keywords
+        prefs = db.execute("SELECT keywords FROM preferences WHERE user_id = ?", (session["user_id"],)).fetchone()
+
+        # Ensure user has set prefs
+        if not prefs:
+            flash("Please set your preferences first!", "error")
+            return("/preferences")
+        
+        u_keywords = json.loads(prefs["keywords"])
+
+        # Get article matches
+        placeholders = " OR ".join(["keywords LIKE ?"] * len(u_keywords))
+        params = [f"%{word}%" for word in u_keywords]
+        articles = db.execute(f"SELECT * FROM articles WHERE {placeholders}", params).fetchall()
+
+        for a in articles:
+            try:
+                # Parse content inside url
+                article = Article(a["article_url"])
+                article.download()
+                article.parse()
+                article.nlp()
+                text = article.text
+            except Exception as e:
+                print(f"Failed to extract: {a["article_url"]} -> {e}")
+                text = ""  # Return empty string
+            
+            # Get article details
+            processed_articles.append({
+                "url": a["article_url"],
+                "pub_date": a["pub_date"],
+                "source": a["source"],
+                "content": text[:5000]  # Limit to 5000 chars
+            })
+
+        # Update status to processed
+        db.execute("UPDATE fetch_status SET completed = 1 WHERE fetch_date = ?", (date.today(),))
+        db.commit()
+
+    return render_template("dashboard.html", articles=processed_articles)

@@ -1,25 +1,32 @@
+import nltk
 import json
 import os
 import requests
+import xml.etree.ElementTree as ET
 
 from datetime import date, datetime, timezone
-from flask import Blueprint, current_app
-import xml.etree.ElementTree as ET
-from rapidfuzz import fuzz
+from email.utils import parsedate_to_datetime
+from flask import current_app
+from newspaper import Article, Config
+from rapidfuzz import process, fuzz
 
-from helpers import get_db, normalize_text
 from dotenv import load_dotenv
+from helpers import get_db, normalize_text
 
-load_dotenv()  # load variables from .env
+load_dotenv()  # Always load first
 
-# https://realpython.com/flask-blueprint/
-# Define blueprint for fetchin news
-news_bp = Blueprint("fetch_news", __name__)
-
-FUZZY_LIMIT = 65  # Fuzzy matching threshold (0–100)
+FUZZY_LIMIT = 70  # Fuzzy matching threshold (0–100)
 NEWSDATA_KEY = os.environ.get("NEWSDATA_KEY")
 
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
+config = Config()
+config.browser_user_agent = os.environ.get("USER_AGENT")
+ 
+ 
 # News Data has char limit for queries
 def batch_keywords(keywords: set, max_chars=100):
     """Split keywords into batches"""
@@ -44,6 +51,7 @@ def batch_keywords(keywords: set, max_chars=100):
 
         # Word with added space exceeds limit
         if total_len + added_len > max_chars:
+            print(f"Batch full, starting new batch with: {word}")
             # Yield current batch
             if batch:
                 yield batch
@@ -59,8 +67,8 @@ def batch_keywords(keywords: set, max_chars=100):
     if batch:
         yield batch  # Out of keywords
 
-
-def fetch_google_tech_news(batch):
+# Limit the articles returned to keep it neat
+def fetch_google_tech_news(batch, max_articles=15):
     """Fetch latest news from Google News"""
 
     queries = " OR ".join(batch)
@@ -69,11 +77,6 @@ def fetch_google_tech_news(batch):
     response = requests.get(url, timeout=10)
     response.raise_for_status()
 
-    # Print raw XML
-    #print("===== RAW XML START =====")
-    #print(response.text[:2000])  # print first 2k chars to avoid huge output
-    #print("===== RAW XML END =====")
-
     articles = []
     #today = date.today()
 
@@ -81,57 +84,67 @@ def fetch_google_tech_news(batch):
     root = ET.fromstring(response.text)
     channel = root.find("channel")
 
-    for item in channel.findall("item"):    
-        # Filter by date
-        pub_date_text = item.findtext("pubDate")
-        if not pub_date_text:
-            continue
-
+    for item in channel.findall("item")[:max_articles]:    
         # Parse date, skip if fails
+        pub_date_str = item.findtext("pubDate")
         try:
-            # Read timezone info from %Z
-            pub_date = datetime.strptime(pub_date_text, "%a, %d %b %Y %H:%M:%S %Z")
-            # Replace with UTC and convert to local time
-            pub_date = pub_date.replace(tzinfo=timezone.utc).astimezone()
+            pub_date = parsedate_to_datetime(pub_date_str).date()
         except ValueError:
-            continue
+            continue  # Can't filter by date
         
         # Limit to current day articles
-        #if pub_date.date() != today:
+        #if pub_date != today:
             #continue
 
         # Extract basic info
         id = item.findtext("guid", "")
         link = item.findtext("link", "")
         source = item.findtext("source", "Google News")
-        title = item.findtext("title", "")
-        desc = item.findtext("description", "")
+
+        # Resolve Google News redirect
+        if "news.google.com/rss/articles/" in link:
+            try:
+                response = requests.get(link, allow_redirects=True, timeout=5)
+                link = response.url  # This is the real article URL
+            except Exception as e:
+                print(f"Failed to resolve Google redirect: {link} -> {e}")
+                continue
 
         # Keyword matching
-        keywords = set()
-        clean_title = normalize_text(title or "")
-        clean_desc = normalize_text(desc or "")
-        text = " ".join([clean_title, clean_desc])
+        filtered = set()
+        try:
+            # Parse content inside url
+            article = Article(link, config=config)
+            article.download()
+            article.parse()
+            article.nlp()
+            keywords = [normalize_text(str(k)) for k in article.keywords if k]
+
+        except Exception as e:
+            print(f"Failed to extract: {link} -> {e}")
+            keywords = []  # Return empty list
 
         for word in batch:
-            if fuzz.partial_ratio(word, text) > FUZZY_LIMIT:
-                keywords.add(word)  # Add keyword to set
+            # Find matches from given list
+            matches = process.extract(word, keywords, scorer=fuzz.ratio, score_cutoff=FUZZY_LIMIT, limit=10)
+            for m in matches:
+                filtered.add(m[0])
         
         # Ensure required info exists
-        if id and link and keywords:
+        if id and link and filtered:
             articles.append({
                 "id": id,
                 "article_url": link,
                 "source": source,
-                "description": desc,
-                "keywords": keywords
+                "pub_date": pub_date,
+                "keywords": filtered
             })
 
     return articles
 
 
 # max 10 articles per request for free tier
-def fetch_from_newsdata(batch, max_results=10):
+def fetch_from_newsdata(batch):
     """Fetch latest news from NewsData.io"""
 
     queries = " OR ".join(batch)
@@ -146,7 +159,6 @@ def fetch_from_newsdata(batch, max_results=10):
         "sort": "pubdateasc",
         "removeduplicate": 1,
     }     
-    #print(f"🔍 Querying NewsData.io with: {queries}")
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()  
     data = response.json()       
@@ -158,7 +170,7 @@ def fetch_from_newsdata(batch, max_results=10):
     # Validate results
     results = data.get("results")
     if not results:
-        print("⚠️ No results returned from NewsData.io — likely invalid query or daily limit reached.")
+        print("No results returned from NewsData.io")
         print("Full response:", data)
         return []
     
@@ -167,40 +179,56 @@ def fetch_from_newsdata(batch, max_results=10):
         id = r.get("article_id")
         link = r.get("link")
         source = r.get("source_id")
-        title = r.get("title")
-        desc = r.get("description")
-
-        # Normalize long texts
-        keywords = set()
-        clean_title = normalize_text(title or "")
-        clean_desc = normalize_text(desc or "")
+        
+        # Remove time from publish date
+        pub_date_str = r.get("pubDate")
+        if pub_date_str:
+            try:
+                pub_date = datetime.fromisoformat(pub_date_str).date()
+            except ValueError:
+                continue  # Can't filter by date
+        else:
+            continue  # Can't filter by date
 
         # Normalize keywords from article if any
         keys = r.get("keywords") or []
         clean_keys = [normalize_text(str(k)) for k in keys if k]
 
-        # Combine all text for fuzzy matching
-        text = " ".join([clean_title, clean_desc] + clean_keys)
+        # Keyword matching
+        filtered = set()
+        try:
+            # Parse content inside url
+            article = Article(link, config=config)
+            article.download()
+            article.parse()
+            article.nlp()
+            keywords = [normalize_text(str(k)) for k in article.keywords if k]
+        except Exception as e:
+            print(f"Failed to extract: {link} -> {e}")
+            keywords = []  # Return empty list
 
-        # Match keywords
+        all_keys = keywords + clean_keys  # Combine 2 lists
+         
         for word in batch:
-            if fuzz.partial_ratio(word, text) > FUZZY_LIMIT:
-                keywords.add(word)
+            # Find matches from given list
+            matches = process.extract(word, all_keys, scorer=fuzz.ratio, score_cutoff=FUZZY_LIMIT, limit=10)
+            for m in matches:
+                filtered.add(m[0])
 
         # Ensure required info exists
-        if id and link and keywords:
+        if id and link and filtered:
             articles.append({
                 "id": id,
                 "article_url": link,
                 "source": source,
-                "description": desc,
-                "keywords": keywords
+                "pub_date": pub_date,
+                "keywords": filtered
             })
 
     return articles
 
 
-def save_article(db, article_id, article_url, source, desc, keywords: set):
+def save_article(db, article_id, article_url, source, date, keywords: set):
     """Insert unique articles and update relevant keywords"""
 
     existing = db.execute("SELECT keywords FROM articles WHERE id = ?", (article_id,)).fetchone()
@@ -213,9 +241,9 @@ def save_article(db, article_id, article_url, source, desc, keywords: set):
     else:
         # Insert article into db
         db.execute("""
-            INSERT OR IGNORE INTO articles (id, article_url, source, description, keywords)
+            INSERT OR IGNORE INTO articles (id, article_url, source, pub_date, keywords)
             VALUES (?, ?, ?, ?)""",
-            (article_id, article_url, source, desc, json.dumps(list(keywords))))
+            (article_id, article_url, source, date, json.dumps(list(keywords))))
 
 
 def fetch_tech_articles():
@@ -223,13 +251,13 @@ def fetch_tech_articles():
 
     db = get_db()
 
-    rows = db.execute("SELECT keyword FROM preferences").fetchall()
+    rows = db.execute("SELECT keywords FROM preferences").fetchall()
     # Set stores unique only
     all_keywords = set()
     for row in rows:
         try:
             # Convert json string back to list and update set
-            keywords_list = json.loads(row["keyword"])
+            keywords_list = json.loads(row["keywords"])
             all_keywords.update(k for k in keywords_list if k)
         except (TypeError, json.JSONDecodeError):
             continue  # Move onto next list
@@ -253,6 +281,6 @@ def fetch_tech_articles():
 
             # Ensure no duplicate articles
             for a in articles:
-                save_article(db, a["id"], a["article_url"], a["source"], a["description"], a["keywords"])
+                save_article(db, a["id"], a["article_url"], a["source"], a["pub_date"], a["keywords"])
 
         db.commit()  # Ensure data is saved in between batches

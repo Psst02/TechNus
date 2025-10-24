@@ -3,12 +3,26 @@ import os
 import uuid
 
 from flask import Blueprint, render_template, request, redirect, session, flash, current_app
-from helpers import login_required, get_db, remove_photo, normalize_text
+from helpers import login_required, get_db, normalize_text
 from werkzeug.utils import secure_filename
 
 # https://realpython.com/flask-blueprint/
 # Define blueprint for all settings
 settings_bp = Blueprint("settings", __name__)
+
+
+def remove_photo(web_path, default_web_path):
+    """Delete photo from file system if it's not default photo"""
+
+    if web_path and web_path != default_web_path:
+        # https://docs.python.org/3/library/os.path.html
+        # Convert from web to file path
+        file_path = os.path.join(current_app.root_path, web_path.lstrip("/"))
+        file_path = os.path.normpath(file_path)
+
+        # Validate path and ensure selected is a file before delete
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            os.remove(file_path)
 
 
 @settings_bp.route("/profile", methods=["GET", "POST"])
@@ -86,7 +100,7 @@ def preferences():
 
     # Fetch existing prefs if any
     rows = db.execute("""
-        SELECT p.keyword, t.name
+        SELECT p.keywords, t.name
         FROM preferences p
         JOIN preference_types t ON p.type_id = t.id
         WHERE p.user_id = ?
@@ -94,7 +108,7 @@ def preferences():
 
     # Load json lists (strings) from db
     for row in rows:
-        prefs[row["name"]] = (json.loads(row["keyword"]) if row["keyword"] else []) or []
+        prefs[row["name"]] = (json.loads(row["keywords"]) if row["keywords"] else []) or []
 
     # Map type names to id(s)
     type_map = {row["name"]: row["id"] for row in db.execute("SELECT * FROM preference_types")}
@@ -142,7 +156,7 @@ def preferences():
         # Insert JSON lists into relevant types
         for key, values in {"jobs": jobs, "industries": industries, "keywords": keywords}.items():
             db.execute(
-                "INSERT INTO preferences (user_id, type_id, keyword) VALUES (?, ?, ?)",
+                "INSERT INTO preferences (user_id, type_id, keywords) VALUES (?, ?, ?)",
                 (session["user_id"], type_map[key], json.dumps(values)))
                 
         db.commit()
