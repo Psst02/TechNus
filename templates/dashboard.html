@@ -10,97 +10,164 @@
         <hr>
         
         <!-- https://getbootstrap.com/docs/4.0/components/list-group/ -->
+        {% if articles %}
         <ul class="list-group list-group-flush">
-            
+            {% for a in articles %}
             <li class="list-group-item">
-                <!-- Healine and toggle icon -->
+                
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Headline</h5>
-                    <button class="btn btn-sm btn-link" 
+                    <!-- Healine with url -->
+                    <h5 class="mb-0">{{ a.title }}</h5>
+                    
+                    <div>
+                        <!-- Link to article icon -->
+                        <a href="{{ a.article_url }}">
+                            <i class="bi bi-link-45deg text-secondary"></i>
+                        </a>
+
+                        <!-- Summary icon button -->
+                        <button class="btn btn-sm btn-link summary-toggle" 
+                            data-url="{{ a.article_url }}"
                             type="button" 
                             data-bs-toggle="collapse" 
-                            data-bs-target="#summary" 
+                            data-bs-target="#summary-{{ loop.index }}" 
                             aria-expanded="false" 
-                            aria-controls="summary">
-                        <i class="bi bi-caret-down-fill text-secondary"></i>
-                    </button>
+                            aria-controls="summary-{{ loop.index }}">
+                            <i class="bi bi-plus-circle-fill text-secondary"></i>
+                        </button>
+                    </div>
                 </div>
 
-                <!-- Collapsible content -->
-                <div class="collapse my-2 ms-5 text-start" id="summary">
-                    <p class="mb-0">Summary ....</p>
+                <!-- Collapsible summary -->
+                <div class="collapse my-2 ms-5 text-start" id="summary-{{ loop.index }}" data-done="false">
+                    <p class="mb-0">{{ a.summary | default('') }}</p>
                 </div>
-            </li>        
+            </li>  
+            {% endfor %} 
         </ul>
+        {% else %}
+        <!-- Display message -->
+        <p>No new articles</p>
+        {% endif %}
     </div>   
-    
-    <!-- {% if news_ready == 0 %}
+
+    <!-- Loading overlay (hidden by default) -->
+    <div id="loading-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100 
+        bg-dark bg-opacity-75 text-white 
+        d-flex flex-column justify-content-center align-items-center z-index-1">
+        <h4>Summarizing article...</h4>
+        <p id="summary-progress">Preparing...</p>
+        <p>Please do not close the browser tab.</p>
+    </div>
+
+
     <script type="module">
 
-        async function summarizeArticles() {
+        document.querySelectorAll('.summary-toggle').forEach(btn => {
+            // Detect button clicks
+            btn.addEventListener('click', async (e) => {
 
-            // Ensure browser supports api
-            if ('Summarizer' in self) {
+                // Get article url and summary container
+                const url = btn.dataset.url;
+                const summaryDiv = document.querySelector(btn.getAttribute('data-bs-target'));
 
-                // Headline summarizer
-                const headlines = {
-                    sharedContext: "",
-                    type: "headline",
-                    format: "plain-text",
-                    length: "short"
-                };
+                // Avoid regenerating summary
+                if (summaryDiv.dataset.done === 'true') return;
 
-                // Bullet point summarizer
-                const bullets = {
-                    sharedContext: "",
-                    type: "key-points",
-                    format: "plain-text",
-                    length: "medium"
-                };
+                // Get overlay container and feedback text
+                const overlay = document.getElementById("loading-overlay");
+                const progressText = document.getElementById('summary-progress');
+                let summarizer = null;
 
-                const availability = await Summarizer.availability();
-                if (availability === 'unavailable') {
-                    // The Summarizer API isn't usable.
-                    return;
-                }
+                try {
+                    overlay.classList.remove("d-none");
+                    progressText.textContent = "Checking summarizer availability...";
 
-                // Check for user activation before creating the summarizer
-                if (navigator.userActivation.isActive) {
+                    // Ensure API is supported
+                    if (!('Summarizer' in self)) {
+                        progressText.textContent = 'Summarizer API not available in this browser.';
+                        return;
+                    }
                     
-                    // Download the model only once
-                    const monitor = (m) => {
-                        m.addEventListener("downloadprogress", (e) => {
-                            console.log(`Model ${Math.round(e.loaded * 100)}% downloaded`);
-                        });
+                    // Congifure summarizer
+                    const options = {
+                        sharedContext: '',
+                        type: 'key-points',
+                        format: 'plain-text',
+                        length: 'short'
                     };
 
-                    // Create summarizers
-                    const summarizerH = await Summarizer.create(headlines);
-                    const summarizerB = await Summarizer.create(bullets);
+                    // Ensure summarizer API is usable
+                    const availability = await Summarizer.availability(options);
+                    if (availability === 'unavailable') {
+                        progressText.textContent = 'Summarizer not supported on this device.';
+                        return;
+                    }
+                    else if (availability === 'downloadable' | availability === 'downloading')
+                    {
+                        progressText.textContent = 'Downloading model...';
+                    }
+
+                    // Create summarizer
+                    progressText.textContent = 'Preparing summarizer...';
+                    const summarizer = await Summarizer.create(options);
+
+                    // Fetch article from flask
+                    progressText.textContent = 'Fetching article text...';
+                    const resp = await fetch(`/extract?url=${encodeURIComponent(url)}`);
+
+                    if (!resp.ok) throw new Error("Failed to fetch article text.");  // Turn to catch
+                    const text = await resp.text();                                  // Fetched
+                    
+                    // Variables for chunking for summary
+                    let chunk = '';
+                    let chunkCount = 0;
+                    let totalUsage = 0;
+                    const maxQuota = summarizer.inputQuota;
+
+                    // Process text in chunks
+                    for (const sentence of text.split('.')) {
+                        // Get potential usage of an extra sentence
+                        const potentialChunk = chunk + sentence + '.';              
+                        const usage = await summarizer.measureInputUsage(potentialChunk);
+                        
+                        // Consumed quota surpasses limit
+                        if (totalUsage + usage > maxQuota) {
+                            // Summarize current chunk if any (without current sentence)
+                            if (chunkCount > 0) {
+                                const summary = await summarizer.summarize(chunk, {
+                                    context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
+                                });
+
+                                // Update summary and reset usage
+                                summaryDiv.innerHTML += `<p>${summary}</p>`;
+                                totalUsage = 0;
+                            }
+                            chunk = sentence + '.';  // Reset chunk to current sentence
+                            chunkCount++;            // Start new chunk
+                        } 
+                        else {
+                            chunk = potentialChunk;  // Add sentence to chunk
+                            totalUsage += usage;     // Update usage
+                        }
+                    }
+
+                    // Summarize final chunk (last sentence within quota)
+                    if (chunk) {
+                        const summary = await summarizer.summarize(chunk, {
+                            context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
+                        });
+                        summaryDiv.innerHTML += `<p>${summary}</p>`;  // Update summary
+                    }
+                    summaryDiv.dataset.done = 'true';  // Flag as generated
                 }
-
-                // Store urls from flask in a list
-                const articleUrls = [];
-
-                // Summarize articles
-                for (const url of articleUrls) {
-
-                    // Parse article text via url
-                    text = ;
-
-                    // Generate summaries
-                    const heading = await summarizerH.summarize(text, {
-                        context: '';
-                    });
-                    const summary = await summarizerB.summarize(text, {
-                        context: '';
-                    });
-
-                    // Populate the summary above somehow
+                catch (e) {
+                    summaryDiv.innerHTML = `<p class="text-danger">Failed to summarize article: ${e}</p>`;
                 }
-            }
-        }
-
+                finally {
+                    overlay.classList.add("d-none");  // Hide loading overlay
+                }
+            });
+        });
     </script>
-    {% endif %}-->
 {% endblock %}

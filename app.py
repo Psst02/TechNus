@@ -83,9 +83,10 @@ def dashboard():
             # Get article details
             processed_articles.append({
                 "url": a["article_url"],
-                "pub_date": a["pub_date"],
                 "source": a["source"],
-                "content": text[:5000]  # Limit to 5000 chars
+                "pub_date": a["pub_date"],
+                "title": a["title"],
+                "summary": a["summary"] or ""
             })
 
         # Update status to processed
