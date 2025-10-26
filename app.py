@@ -1,11 +1,12 @@
 import json
 import os
 
-from datetime import date
-from flask import Flask, flash, session, render_template
+from datetime import date, datetime, timedelta
+from flask import Flask, flash, session, render_template, request, redirect, jsonify
 from flask_session import Session
 from helpers import login_required, get_db, db_teardown
 from newspaper import Article
+from typing import Literal
 
 # Blueprints
 from auth import auth_bp, oauth
@@ -44,53 +45,133 @@ def after_request(response):
 @app.route("/")
 @login_required
 def dashboard():
-    """Show dashboard"""
+    """Show all/filtered articles in dashboard"""
+    
+    tab = request.args.get("tab", "all")  # Default to "all" if not provided
+    articles = get_articles(tab)
+    return render_template("dashboard.html", articles=articles, current_tab=tab)
+
+
+@app.route("/extract-article")
+@login_required
+def extract_article():
+    """Let summarizer call this function to extract article text content"""
+
+    # Ensure article url exists
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"e": "Missing URL parameter"}), 400
+
+    # Try parsing text from url
+    try:
+        article = Article(url)
+        article.download()
+        article.parse()
+        article.nlp()
+
+        # Extract clean text and validate
+        text = article.text.strip()
+        if not text:
+            return jsonify({"e": "No article text found"}), 404
+
+        return text, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    # Maybe broken link
+    except Exception as e:
+        print("Extraction failed:", e)  # For debugging
+        return jsonify({"e": "Failed to fetch article text."}), 500
+    
+
+@app.route("/update-summary")
+@login_required
+def update_summary():
+    """Update summarized content"""
+
+    summary = request.args.get("summary")
+    article_id = request.args.get("article_id")
+    db = get_db()
+    db.execute("UPDATE articles summary = ? WHERE id = ?", (summary, article_id))
+    db.commit()
+
+
+@app.route("/delete-article/<int:id>")
+@login_required
+def delete_article(id):
+    """Let user delete article"""
 
     db = get_db()
-    processed_articles = []
+    db.execute("DELETE FROM articles WHERE id = ?", (id,))
+    db.commit()
+    flash("Article deleted.", "success")
+    return redirect("/")
 
-    # Get fetch_status
-    status = db.execute("SELECT completed FROM fetch_status WHERE fetch_date = ?", (date.today(),)).fetchone()
-    # Fetched but not processed
-    if status and status["completed"] == 0:
-        # Get user's keywords
-        prefs = db.execute("SELECT keywords FROM preferences WHERE user_id = ?", (session["user_id"],)).fetchone()
 
-        # Ensure user has set prefs
-        if not prefs:
-            flash("Please set your preferences first!", "error")
-            return("/preferences")
+# Limit params to all, new, old
+def get_articles(filter_mode: Literal["all", "new", "old"] = "all"):
+    """Fetch and filter articles based on user's keywords and date."""
+
+    db = get_db()
+    filtered_articles = []
+
+    # Ensure user has keyword preferences
+    prefs = db.execute("SELECT keywords FROM preferences WHERE user_id = ?", (session["user_id"],)).fetchone()
+    if not prefs:
+        flash("Please set your preferences to get started.", "error")
+        return redirect("/preferences")
+
+    user_keywords = json.loads(prefs["keywords"])  # Get keywords string
+
+    # Dynamic placeholders for keyword filter
+    placeholders = " OR ".join(["keywords LIKE ?"] * len(user_keywords))
+    params = [f"%{word}%" for word in user_keywords]
+
+    # Date condition in query
+    today_str = date.today().isoformat()
+    date_condition = ""
+
+    if filter_mode == "new":
+        date_condition = "AND fetched_at = ?"  # Today
+        params.append(today_str)
+
+    elif filter_mode == "old":
+        date_condition = "AND fetched_at < ?"  # Previous days
+        params.append(today_str)
+
+    # Execute query
+    query = f"""
+        SELECT id, article_url, source, pub_date, title, summary, fetched_at
+        FROM articles
+        WHERE ({placeholders}) {date_condition}
+        ORDER BY fetched_at DESC
+    """
+    articles = db.execute(query, params).fetchall()
+
+    # Format for front end
+    for a in articles:
         
-        u_keywords = json.loads(prefs["keywords"])
+        # Expiry countdown
+        fetched_date = datetime.fromisoformat(a["fetched_at"]).date()
+        countdown = compute_expiry(fetched_date)
 
-        # Get article matches
-        placeholders = " OR ".join(["keywords LIKE ?"] * len(u_keywords))
-        params = [f"%{word}%" for word in u_keywords]
-        articles = db.execute(f"SELECT * FROM articles WHERE {placeholders}", params).fetchall()
+        filtered_articles.append({
+            "id": a["id"],
+            "url": a["article_url"],
+            "source": a["source"],
+            "expiry": countdown,
+            "pub_date": a["pub_date"] or "-",
+            "title": a["title"],
+            "summary": a["summary"] or ""
+        })
 
-        for a in articles:
-            try:
-                # Parse content inside url
-                article = Article(a["article_url"])
-                article.download()
-                article.parse()
-                article.nlp()
-                text = article.text
-            except Exception as e:
-                print(f"Failed to extract: {a["article_url"]} -> {e}")
-                text = ""  # Return empty string
-            
-            # Get article details
-            processed_articles.append({
-                "url": a["article_url"],
-                "source": a["source"],
-                "pub_date": a["pub_date"],
-                "title": a["title"],
-                "summary": a["summary"] or ""
-            })
+    return filtered_articles
 
-        # Update status to processed
-        db.execute("UPDATE fetch_status SET completed = 1 WHERE fetch_date = ?", (date.today(),))
-        db.commit()
 
-    return render_template("dashboard.html", articles=processed_articles)
+def compute_expiry(fetched_at: date):
+    """Get expiry countdown from fetch date"""
+
+    # Expires in 5 days from fetch date
+    expires_at = fetched_at + timedelta(days=5)
+    countdown = (expires_at - date.today()).days
+    return countdown
+
+
+

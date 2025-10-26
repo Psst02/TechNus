@@ -100,6 +100,7 @@ def fetch_google_tech_news(batch, max_articles=15):
         id = item.findtext("guid", "")
         link = item.findtext("link", "")
         source = item.findtext("source", "Google News")
+        title = item.findtext("title")
 
         # Resolve Google News redirect
         if "news.google.com/rss/articles/" in link:
@@ -131,13 +132,14 @@ def fetch_google_tech_news(batch, max_articles=15):
                 filtered.add(m[0])
         
         # Ensure required info exists
-        if id and link and filtered:
+        if id and link and filtered and title:
             articles.append({
                 "id": id,
                 "article_url": link,
                 "source": source,
                 "pub_date": pub_date,
-                "keywords": filtered
+                "keywords": filtered,
+                "title": title
             })
 
     return articles
@@ -179,6 +181,7 @@ def fetch_from_newsdata(batch):
         id = r.get("article_id")
         link = r.get("link")
         source = r.get("source_id")
+        title = r.get("title")
         
         # Remove time from publish date
         pub_date_str = r.get("pubDate")
@@ -216,19 +219,20 @@ def fetch_from_newsdata(batch):
                 filtered.add(m[0])
 
         # Ensure required info exists
-        if id and link and filtered:
+        if id and link and filtered and title:
             articles.append({
                 "id": id,
                 "article_url": link,
                 "source": source,
                 "pub_date": pub_date,
-                "keywords": filtered
+                "keywords": filtered,
+                "title": title
             })
 
     return articles
 
 
-def save_article(db, article_id, article_url, source, date, keywords: set):
+def save_article(db, article_id, article_url, source, date, keywords: set, title):
     """Insert unique articles and update relevant keywords"""
 
     existing = db.execute("SELECT keywords FROM articles WHERE id = ?", (article_id,)).fetchone()
@@ -241,9 +245,9 @@ def save_article(db, article_id, article_url, source, date, keywords: set):
     else:
         # Insert article into db
         db.execute("""
-            INSERT OR IGNORE INTO articles (id, article_url, source, pub_date, keywords)
+            INSERT OR IGNORE INTO articles (id, article_url, source, pub_date, keywords, title)
             VALUES (?, ?, ?, ?)""",
-            (article_id, article_url, source, date, json.dumps(list(keywords))))
+            (article_id, article_url, source, date, json.dumps(list(keywords))), title)
 
 
 def fetch_tech_articles():
@@ -281,6 +285,6 @@ def fetch_tech_articles():
 
             # Ensure no duplicate articles
             for a in articles:
-                save_article(db, a["id"], a["article_url"], a["source"], a["pub_date"], a["keywords"])
+                save_article(db, a["id"], a["article_url"], a["source"], a["pub_date"], a["keywords"], a["title"])
 
         db.commit()  # Ensure data is saved in between batches

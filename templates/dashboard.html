@@ -6,7 +6,18 @@
 
 {% block main %}
     <div class="container">
-        <h4 class="mb-3">Top Stories</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Top Stories</h4>
+
+            <!-- Filter dropdown styled like a select -->
+            <form method="get" action="/" class="d-inline-block">
+                <select name="tab" class="form-select form-select-sm rounded-pill py-2 ps-3" onchange="this.form.submit()">
+                    <option value="all" {% if current_tab == "all" %}selected{% endif %}>All</option>
+                    <option value="new" {% if current_tab == "new" %}selected{% endif %}>New</option>
+                    <option value="old" {% if current_tab == "old" %}selected{% endif %}>Old</option>
+                </select>
+            </form>
+        </div>
         <hr>
         
         <!-- https://getbootstrap.com/docs/4.0/components/list-group/ -->
@@ -16,38 +27,61 @@
             <li class="list-group-item">
                 
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <!-- Healine with url -->
-                    <h5 class="mb-0">{{ a.title }}</h5>
-                    
-                    <div>
-                        <!-- Link to article icon -->
-                        <a href="{{ a.article_url }}">
-                            <i class="bi bi-link-45deg text-secondary"></i>
+                    <!-- Left side: link + title -->
+                    <div class="d-flex align-items-center flex-grow-1">
+                        <!-- Link to article -->
+                        <a href="{{ a.article_url }}" title="Open article" class="me-2">
+                            <i class="bi bi-link-45deg text-secondary fs-5"></i>
                         </a>
-
-                        <!-- Summary icon button -->
-                        <button class="btn btn-sm btn-link summary-toggle" 
-                            data-url="{{ a.article_url }}"
-                            type="button" 
-                            data-bs-toggle="collapse" 
-                            data-bs-target="#summary-{{ loop.index }}" 
-                            aria-expanded="false" 
-                            aria-controls="summary-{{ loop.index }}">
-                            <i class="bi bi-plus-circle-fill text-secondary"></i>
+                        <!-- Title -->
+                        <h5 class="mb-0 text-truncate">{{ a.title }}</h5>
+                    </div>
+                    
+                    <!-- Right side: icons -->
+                    <div class="d-flex align-items-center gap-2 ms-3">
+                        <!-- Summary toggle -->
+                        <button class="btn btn-sm btn-link p-0 summary-toggle"
+                                data-url="{{ a.article_url }}"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#summary-{{ loop.index }}"
+                                aria-expanded="false"
+                                aria-controls="summary-{{ loop.index }}"
+                                title="Generate summary">
+                            <i class="bi bi-plus-circle text-secondary fs-5"></i>
                         </button>
+
+                        <!-- Expiry info -->
+                        <div title="Expires in {{ a.expiry }} days">
+                            <i class="bi bi-exclamation-circle text-warning fs-5"></i>
+                        </div>
+
+                        <!-- Delete article -->
+                        <a href="/delete-article/{{ a.id }}" title="Delete article">
+                            <i class="bi bi-x-circle text-danger fs-5"></i>
+                        </a>
                     </div>
                 </div>
 
-                <!-- Collapsible summary -->
-                <div class="collapse my-2 ms-5 text-start" id="summary-{{ loop.index }}" data-done="false">
-                    <p class="mb-0">{{ a.summary | default('') }}</p>
+                <!-- Collapsible content -->
+                <div class="collapse my-2" id="summary-{{ loop.index }}">
+                    <!-- Article info -->
+                    <div class="text-start text-muted small">
+                        <p class="mb-1">Source: {{ a.source }}</p>
+                        <p class="mb-1">Published at: {{ a.pub_date }}</p>
+                    </div>
+
+                    <!-- Summary -->
+                    <div class="ms-4 mt-2 text-start summary-body" data-done="false">
+                        <p class="mb-0">{{ a.summary | default('') }}</p>
+                    </div>
                 </div>
             </li>  
             {% endfor %} 
         </ul>
         {% else %}
-        <!-- Display message -->
-        <p>No new articles</p>
+        <!-- Feedback prompt -->
+        <p class="mt-4 text-muted">No articles available.</p>
         {% endif %}
     </div>   
 
@@ -55,6 +89,9 @@
     <div id="loading-overlay" class="d-none position-fixed top-0 start-0 w-100 h-100 
         bg-dark bg-opacity-75 text-white 
         d-flex flex-column justify-content-center align-items-center z-index-1">
+        <!-- Spinning thing -->
+        <div class="spinner-border text-light m-3" role="status"></div>
+        <!-- Text feedback -->
         <h4>Summarizing article...</h4>
         <p id="summary-progress">Preparing...</p>
         <p>Please do not close the browser tab.</p>
@@ -69,7 +106,8 @@
 
                 // Get article url and summary container
                 const url = btn.dataset.url;
-                const summaryDiv = document.querySelector(btn.getAttribute('data-bs-target'));
+                const collapseDiv = document.querySelector(btn.getAttribute('data-bs-target'));
+                const summaryDiv = collapseDiv.querySelector('.summary-body');
 
                 // Avoid regenerating summary
                 if (summaryDiv.dataset.done === 'true') return;
@@ -114,7 +152,7 @@
 
                     // Fetch article from flask
                     progressText.textContent = 'Fetching article text...';
-                    const resp = await fetch(`/extract?url=${encodeURIComponent(url)}`);
+                    const resp = await fetch(`/extract-article?url=${encodeURIComponent(url)}`);
 
                     if (!resp.ok) throw new Error("Failed to fetch article text.");  // Turn to catch
                     const text = await resp.text();                                  // Fetched
@@ -169,5 +207,6 @@
                 }
             });
         });
+        
     </script>
 {% endblock %}
