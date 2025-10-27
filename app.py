@@ -47,8 +47,19 @@ def after_request(response):
 def dashboard():
     """Show all/filtered articles in dashboard"""
     
-    tab = request.args.get("tab", "all")  # Default to "all" if not provided
-    articles = get_articles(tab)
+    tab = request.args.get("tab", "all")
+
+    # Validate tab
+    if tab not in ["all", "new", "old"]:
+        tab = "all"
+
+    articles = get_articles(tab)  # Get relevant articles
+
+    # Notify users of new articles if any
+    newly_fetched = len(get_articles("new"))
+    if newly_fetched > 0:
+        flash(f"{newly_fetched} new articles available for you today!", "info")
+        
     return render_template("dashboard.html", articles=articles, current_tab=tab)
 
 
@@ -81,16 +92,19 @@ def extract_article():
         return jsonify({"e": "Failed to fetch article text."}), 500
     
 
-@app.route("/update-summary")
+@app.route("/update-summary", methods=["POST"])
 @login_required
 def update_summary():
     """Update summarized content"""
 
-    summary = request.args.get("summary")
-    article_id = request.args.get("article_id")
+    data = request.get_json()
+    article_id = data.get("article_id")
+    summary = data.get("summary")
+
     db = get_db()
     db.execute("UPDATE articles summary = ? WHERE id = ?", (summary, article_id))
     db.commit()
+    return jsonify({"success": True})
 
 
 @app.route("/delete-article/<int:id>")

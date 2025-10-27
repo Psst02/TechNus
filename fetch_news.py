@@ -4,7 +4,7 @@ import os
 import requests
 import xml.etree.ElementTree as ET
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from flask import current_app
 from newspaper import Article, Config
@@ -15,7 +15,7 @@ from helpers import get_db, normalize_text
 
 load_dotenv()  # Always load first
 
-FUZZY_LIMIT = 70  # Fuzzy matching threshold (0–100)
+FUZZY_LIMIT = 60  # Fuzzy matching threshold (0–100)
 NEWSDATA_KEY = os.environ.get("NEWSDATA_KEY")
 
 try:
@@ -78,7 +78,7 @@ def fetch_google_tech_news(batch, max_articles=15):
     response.raise_for_status()
 
     articles = []
-    #today = date.today()
+    start_date = date.today() - timedelta(days=5)  # Last 5 days
 
     # Parse XML and extract details
     root = ET.fromstring(response.text)
@@ -92,9 +92,9 @@ def fetch_google_tech_news(batch, max_articles=15):
         except ValueError:
             continue  # Can't filter by date
         
-        # Limit to current day articles
-        #if pub_date != today:
-            #continue
+        # Skip if older than 5 days ago
+        if pub_date < start_date:
+            continue
 
         # Extract basic info
         id = item.findtext("guid", "")
@@ -152,7 +152,9 @@ def fetch_from_newsdata(batch):
     queries = " OR ".join(batch)
     url = "https://newsdata.io/api/1/latest"
     articles = []
- 
+    
+    start_date = date.today() - timedelta(days=5)  # Last 5 days
+
     params = {
         "apikey": NEWSDATA_KEY,
         "q": queries,
@@ -177,21 +179,25 @@ def fetch_from_newsdata(batch):
         return []
     
     for r in results:
+        # Filter by date
+        pub_date_str = r.get("pubDate")
+        if not pub_date_str:
+            continue
+        try:
+            # Remove time from published date
+            pub_date = datetime.fromisoformat(pub_date_str).date()
+        except ValueError:
+            continue  # Can't filter by date
+
+        # Skip if older than 5 days ago
+        if pub_date < start_date:
+            continue
+
         # Extract basic info
         id = r.get("article_id")
         link = r.get("link")
         source = r.get("source_id")
         title = r.get("title")
-        
-        # Remove time from publish date
-        pub_date_str = r.get("pubDate")
-        if pub_date_str:
-            try:
-                pub_date = datetime.fromisoformat(pub_date_str).date()
-            except ValueError:
-                continue  # Can't filter by date
-        else:
-            continue  # Can't filter by date
 
         # Normalize keywords from article if any
         keys = r.get("keywords") or []
