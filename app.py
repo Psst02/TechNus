@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from flask import Flask, flash, session, render_template, request, redirect, jsonify
 from flask_session import Session
 from helpers import login_required, get_db, db_teardown
-from newspaper import Article
+from newspaper import Article, Config
 from typing import Literal
 
 # Blueprints
@@ -31,6 +31,8 @@ db_teardown(app)     # Register db teardown
 app.register_blueprint(auth_bp)
 app.register_blueprint(settings_bp)
 
+config = Config()
+config.browser_user_agent = os.environ.get("USER_AGENT")
 
 # Disable data cache (Ensures fresh content)
 @app.after_request
@@ -75,11 +77,9 @@ def extract_article():
 
     # Try parsing text from url
     try:
-        article = Article(url)
+        article = Article(url, config=config)
         article.download()
         article.parse()
-        article.nlp()
-
         # Extract clean text and validate
         text = article.text.strip()
         if not text:

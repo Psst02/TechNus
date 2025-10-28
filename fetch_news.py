@@ -8,10 +8,9 @@ from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from flask import current_app
 from newspaper import Article, Config
-from rapidfuzz import process, fuzz
 
 from dotenv import load_dotenv
-from helpers import get_db, normalize_text
+from helpers import get_db, normalize_text, get_sematic_matches
 
 load_dotenv()  # Always load first
 
@@ -25,7 +24,6 @@ except LookupError:
 
 config = Config()
 config.browser_user_agent = os.environ.get("USER_AGENT")
- 
  
 # News Data has char limit for queries
 def batch_keywords(keywords: set, max_chars=100):
@@ -68,7 +66,7 @@ def batch_keywords(keywords: set, max_chars=100):
         yield batch  # Out of keywords
 
 # Limit the articles returned to keep it neat
-def fetch_google_tech_news(batch, max_articles=15):
+def fetch_google_tech_news(batch, max_articles=10):
     """Fetch latest news from Google News"""
 
     queries = " OR ".join(batch)
@@ -125,11 +123,7 @@ def fetch_google_tech_news(batch, max_articles=15):
             print(f"Failed to extract: {link} -> {e}")
             keywords = []  # Return empty list
 
-        for word in batch:
-            # Find matches from given list
-            matches = process.extract(word, keywords, scorer=fuzz.ratio, score_cutoff=FUZZY_LIMIT, limit=10)
-            for m in matches:
-                filtered.add(m[0])
+        filtered.update(get_sematic_matches(batch, keywords))
         
         # Ensure required info exists
         if id and link and filtered and title:
@@ -217,12 +211,7 @@ def fetch_from_newsdata(batch):
             keywords = []  # Return empty list
 
         all_keys = keywords + clean_keys  # Combine 2 lists
-         
-        for word in batch:
-            # Find matches from given list
-            matches = process.extract(word, all_keys, scorer=fuzz.ratio, score_cutoff=FUZZY_LIMIT, limit=10)
-            for m in matches:
-                filtered.add(m[0])
+        filtered.update(get_sematic_matches(batch, all_keys))
 
         # Ensure required info exists
         if id and link and filtered and title:
