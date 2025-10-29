@@ -1,10 +1,10 @@
-import json
 import os
+import json
 import uuid
 
-from flask import Blueprint, render_template, request, redirect, session, flash, current_app
-from helpers import login_required, get_db, normalize_text
 from werkzeug.utils import secure_filename
+from helpers import login_required, get_db, normalize_text
+from flask import Blueprint, render_template, request, redirect, session, flash, current_app
 
 # https://realpython.com/flask-blueprint/
 # Define blueprint for all settings
@@ -175,20 +175,22 @@ def preferences():
 def delete_acc():
     """Let user delete account and related data"""
 
+    db = get_db()
+
     if request.method == "POST":
         text = request.form.get("confirm-delete")
         if not text:
             return render_template("delete_acc.html", fb="Required field")
         
         # Ensure case insensitive
-        text = text.lower()
-        if text == "confirm":
-            
+        text = text.lower().strip()
+        if text != "confirm":
+            return render_template("delete_acc.html", fb="Please confirm")
+        
+        if text == "confirm":       
             session.clear()
             # Delete from db
-            db = get_db()
             db.execute("DELETE FROM users WHERE id = ?", (session["user_id"],))
-
         db.commit()
 
         flash("Account deleted.", "success")

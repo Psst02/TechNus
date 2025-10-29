@@ -1,5 +1,5 @@
-from datetime import date, datetime, timedelta
 from helpers import get_db
+from datetime import date, datetime, timedelta
 
 def delete_old_articles():
     """Delete articles fetched more than 5 days ago"""

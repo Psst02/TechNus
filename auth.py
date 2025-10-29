@@ -1,9 +1,9 @@
 import os
 import sqlite3
 
+from helpers import get_db
 from authlib.integrations.flask_client import OAuth
 from flask import Blueprint, render_template, request, redirect, session, flash, url_for
-from helpers import get_db
 
 # https://realpython.com/flask-blueprint/
 # Define blueprint for all user auth routes

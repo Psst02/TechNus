@@ -1,17 +1,16 @@
+import os
 import nltk
 import json
-import os
 import requests
 import xml.etree.ElementTree as ET
 
-from datetime import date, datetime, timedelta
-from email.utils import parsedate_to_datetime
 from flask import current_app
 from newspaper import Article, Config
-
-from dotenv import load_dotenv
+from email.utils import parsedate_to_datetime
+from datetime import date, datetime, timedelta
 from helpers import get_db, normalize_text, get_sematic_matches
 
+from dotenv import load_dotenv
 load_dotenv()  # Always load first
 
 FUZZY_LIMIT = 60  # Fuzzy matching threshold (0–100)

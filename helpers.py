@@ -2,14 +2,14 @@ import os
 import re
 import json
 import sqlite3
+import numpy as np
 import unicodedata
 import time, random
-import numpy as np
 
-from flask import redirect, session, g, current_app
-from functools import wraps
 from google import genai
+from functools import wraps
 from google.genai import types
+from flask import redirect, session, g, current_app
 from sklearn.metrics.pairwise import cosine_similarity
 
 from dotenv import load_dotenv
