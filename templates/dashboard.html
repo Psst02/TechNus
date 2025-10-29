@@ -73,9 +73,13 @@
                     </div>
 
                     <!-- Summary -->
-                    <div class="ms-4 mt-2 text-start summary-body">
-                        <p class="mb-0">{{ a.summary | default('') }}</p>
-                    </div>
+                    <ul class="ms-4 mt-2 text-start summary-body mb-0">
+                        {% if a.summary %}
+                            {% for line in a.summary.splitlines() if line.strip().startswith(('-', '*', '+')) %}
+                                <li>{{ line.strip().lstrip('-*+ ') }}</li>
+                            {% endfor %}
+                        {% endif %}
+                    </ul>
                 </div>
             </li>  
             {% endfor %} 
@@ -109,11 +113,9 @@
                 const url = btn.dataset.url;
                 const articleId = btn.dataset.id
                 const collapseDiv = document.querySelector(btn.getAttribute('data-bs-target'));
-                const summaryDiv = collapseDiv.querySelector('.summary-body');
+                const summaryList = collapseDiv.querySelector('.summary-body');
 
-                // Avoid regenerating summary if it already exists
-                const existingSummary = summaryDiv.textContent.trim();
-                if (existingSummary !== '') return;
+                if (summaryList.children.length > 0) return; // already summarized
 
                 // Get overlay container and feedback text
                 const overlay = document.getElementById("loading-overlay");
@@ -132,9 +134,9 @@
                     
                     // Congifure summarizer
                     const options = {
-                        sharedContext: '',
+                        sharedContext: 'This is most probably a tech article.',
                         type: 'key-points',
-                        format: 'plain-text',
+                        format: 'markdown',
                         length: 'medium'
                     };
 
@@ -161,57 +163,65 @@
                     const text = await resp.text();                                  // Fetched
                     
                     // Variables for chunking for summary
-                    let chunk = '';
-                    let chunkCount = 0;
-                    let totalUsage = 0;
+                    let currentChunk = '';
                     let summaries = [];
-                    const maxQuota = summarizer.inputQuota;
+                    const sentences = text.split(/(?<=[.!?])\s+/);   // Safer split: handles . or ! or ?
+                    const maxQuota = summarizer.inputQuota || 5000;  // In case quota is undefined
+                    let usage = 0;
 
                     // Summarize in chunks
                     progressText.textContent = 'Summarizing article in chunks...';
-                    for (const sentence of text.split('.')) {
-                        // Get potential usage of an extra sentence
-                        const potentialChunk = chunk + sentence + '.';              
-                        const usage = await summarizer.measureInputUsage(potentialChunk);
-                        
-                        // Consumed quota surpasses limit
-                        if (totalUsage + usage > maxQuota) {
-                            // Summarize current chunk if any (without current sentence)
-                            if (chunkCount > 0) {
-                                const chunkSummary = await summarizer.summarize(chunk, {
-                                    context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
-                                });
 
-                                // Keep track of chunk summaries
-                                summaries.push(chunkSummary);
-                                totalUsage = 0;
-                            }
-                            chunk = sentence + '.';  // Reset chunk to current sentence
-                            chunkCount++;            // Start new chunk
+                    for (const sentence of sentences) {
+                        // Get potential usage of an extra sentence
+                        const potential = currentChunk + sentence + '.';              
+                        const estimateUsage = await summarizer.measureInputUsage(potential);
+                        
+                        // If adding sentence exceeds quota
+                        if (usage + estimateUsage > maxQuota && currentChunk.trim().length > 0) {
+                            // Summarize current chunk if any (without current sentence)
+                            const chunkSummary = await summarizer.summarize(currentChunk, {
+                                context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
+                            });
+
+                            // Keep track of chunk summaries
+                            summaries.push(chunkSummary);
+                            usage = 0;                      // Reset usage
+                            currentChunk = sentence + '.';  // Reset chunk to current sentence
                         } 
                         else {
-                            chunk = potentialChunk;  // Add sentence to chunk
-                            totalUsage += usage;     // Update usage
+                            currentChunk = potential;  // Add sentence to chunk
+                            usage += estimateUsage;    // Update usage
                         }
                     }
 
                     // Summarize last chunk (if last sentence within quota)
-                    if (chunk) {
-                        const chunkSummary = await summarizer.summarize(chunk, {
+                    if (currentChunk.trim().length > 0) {
+                        const chunkSummary = await summarizer.summarize(currentChunk, {
                             context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
                         });
                         summaries.push(chunkSummary);  // Keep track of chunk summaries
                     }
 
                     // Combined summary
-                    const combined = summaries.join(' ');  // Combine summaries into string
+                    const combined = summaries.join('\n');  // Combine keypoints
                     const finalSummary = await summarizer.summarize(combined, {
                         context: 'Provide a clear, concise summary suitable for a tech audience of all ages and experience levels.',
                     });
-                    summaryDiv.innerHTML = `<p>${finalSummary}</p>`;  // Update summary
+                    
+                    // Split each point to a list, trim, only get lines starting with bullet md syntax
+                    const lines = finalSummary
+                        .split('\n')                             
+                        .filter(line =>                           
+                            line.trim().startsWith('-') ||        
+                            line.trim().startsWith('*') ||       
+                            line.trim().startsWith('+')           
+                        );
+                    // Update the summary list without reload
+                    summaryList.innerHTML = lines.map(line => `<li>${line.trim().replace(/^[-*+]\s*/, '')}</li>`).join('');
 
                     // Update summary in table via flask
-                    fetch('/update-summary', {
+                    await fetch('/update-summary', {
                         "method": "POST",
                         "headers": {"Content-Type": "application/json"},
                         "body": JSON.stringify({
@@ -219,12 +229,13 @@
                             "summary": finalSummary
                         })
                     })
-                    .then(response => response.json())                              // Parse flask response
-                    .then(data => {console.log("Summary updated successfully!");})  // Notify if success
-                    .catch(e => console.error("Failed to update summary:", e));     // Notify if error
+
+                    const data = await resp.json();                      // Parse flask response
+                    console.log("Summary updated successfully!", data);  // Notify success
+
                 }
                 catch (e) {
-                    summaryDiv.innerHTML = `<p class="text-danger">Failed to summarize article: ${e}</p>`;
+                    summaryList.innerHTML = `<p class="text-danger">Failed to summarize article: ${e}</p>`;
                 }
                 finally {
                     overlay.classList.add("d-none");  // Hide loading overlay

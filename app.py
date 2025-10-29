@@ -95,19 +95,27 @@ def extract_article():
 @app.route("/update-summary", methods=["POST"])
 @login_required
 def update_summary():
-    """Update summarized content"""
+    """Update summarized content (stored as Markdown to preserve formatting)"""
 
     data = request.get_json()
     article_id = data.get("article_id")
     summary = data.get("summary")
 
-    db = get_db()
-    db.execute("UPDATE articles summary = ? WHERE id = ?", (summary, article_id))
-    db.commit()
-    return jsonify({"success": True})
+    if not article_id or summary is None:
+        return jsonify({"error": "Missing article_id or summary"}), 400
+    
+    try:
+        db = get_db()
+        db.execute("UPDATE articles SET summary = ? WHERE id = ?", (summary, article_id))
+        db.commit()
+        return jsonify({"success": True})
+    
+    except Exception as e:
+        print("Update failed:", e)
+        return jsonify({"error": "Database update failed"}), 500
 
 
-@app.route("/delete-article/<int:id>")
+@app.route("/delete-article/<id>")
 @login_required
 def delete_article(id):
     """Let user delete article"""

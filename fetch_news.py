@@ -154,8 +154,7 @@ def fetch_from_newsdata(batch):
         "q": queries,
         "category": "technology",
         "language": "en",
-        "sort": "pubdateasc",
-        "removeduplicate": 1,
+        "sort": "pubdateasc"
     }     
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()  
@@ -249,8 +248,8 @@ def fetch_tech_articles():
     """Fetch lastest tech news filtered by keywords"""
 
     db = get_db()
-
     rows = db.execute("SELECT keywords FROM preferences").fetchall()
+
     # Set stores unique only
     all_keywords = set()
     for row in rows:
@@ -283,3 +282,6 @@ def fetch_tech_articles():
                 save_article(db, a["id"], a["article_url"], a["source"], a["pub_date"], a["keywords"], a["title"])
 
         db.commit()  # Ensure data is saved in between batches
+
+if __name__ == "__main__":
+    fetch_tech_articles()
